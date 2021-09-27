@@ -4,6 +4,7 @@ from alphapept.paths import PROCESSED_PATH
 from alphapept.settings import load_settings
 from alphapept.fasta import read_database
 from alphapept.display import calculate_sequence_coverage
+from alphapept.search import plot_psms
 import os
 import alphapept.io
 import pandas as pd
@@ -444,6 +445,108 @@ def sequence_coverage_map(file: str, options: list, results_yaml: dict):
                 st.markdown('<pre>'+formatted_sequence+'</pre>', unsafe_allow_html=True)
 
 
+def browse_psms(file: str, options: list, results_yaml: dict):
+    """Plots PSM
+
+    Args:
+        file (str): Path to file.
+        options (list): List of plot options.
+        results_yaml (dict): Results yaml dict.
+    """
+    print('psm browser')
+
+    with st.beta_expander("PSM browser"):
+        # get peptides matching target
+        protein_fdr = pd.read_hdf(file, "protein_fdr")
+
+        psm_id = st.text_input(
+            "Enter a PSM id"
+        )
+
+        selected_file = readable_files_from_yaml(results_yaml)[1]
+
+        print(selected_file)
+        if not psm_id: return
+
+        with st.spinner('Fetching sequence..'):
+
+            ms_file = alphapept.io.MS_Data_File(selected_file)
+            print(ms_file)
+
+
+            query_frag, query_int, masses, ints, ion, ion_type = alphapept.search.plot_psms(int(psm_id), ms_file, return_data = True)
+
+            fig = make_subplots(rows=1, cols=1)
+
+            xmin = np.min(np.concatenate((query_frag,masses))) - 20
+            xmax = np.max(np.concatenate((query_frag,masses))) + 20
+            ymax = max(query_int)
+            peak_label_offset = 0.02 * ymax
+
+            style_dict = {}
+
+            for i in range(len(ion)):
+
+                if 'b-' in ion[i]:
+                    style_dict[i] = { 'level': 1, 'color': 'blue' }
+                    continue
+                if 'y-' in ion[i]:
+                    style_dict[i] = { 'level': 2, 'color': 'red' }
+                    continue
+                if 'b' in ion[i]:
+                    style_dict[i] = { 'level': 0, 'color': 'blue' }
+                    continue
+                if 'y' in ion[i]:
+                    style_dict[i] = { 'level': 3, 'color': 'red' }
+                    continue
+                print(ion[i])
+
+            # query peaks
+            shapes = [
+                {
+                    'type': 'line', 'x0': query_frag[i], 'x1': query_frag[i], 'y0': 0, 'y1': query_int[i],
+                    'line': {'color': 'black', 'width': 2}
+                } for i in range(len(query_frag))
+            ]
+
+            # hit peaks
+            shapes += [
+                {
+                    'type': 'line', 'x0': masses[i], 'x1': masses[i], 'y0': 0, 'y1': ints[i],
+                    'line': {'color': style_dict[i]['color'], 'width': 2}
+                } for i in range(len(masses))
+            ]
+
+            # dashed line markers
+            #shapes += [
+            #    {
+            #        'type': 'line', 'x0': masses[i], 'x1': masses[i], 'y0': ints[i], 'y1': y_data_max,
+            #        'line': {'color': 'grey', 'width': 1, 'dash': 'dot'}
+            #    } for i in range(len(masses))
+            #]
+
+            # peak m/z labels
+            annotations = [
+                {
+                    'x': masses[i], 'y': ints[i] + peak_label_offset, 'text': str(int(masses[i])), 'showarrow': False,
+                    'font': { 'family': 'Courier New, monospace', 'size': 16 }
+                } for i in range(len(masses))
+            ]
+
+            # fragnemt ion labels
+            annotations += [
+                {
+                    'x': masses[i], 'y': ints[i] + peak_label_offset * 3, 'text': ion[i], 'showarrow': False,
+                    'font': { 'family': 'Courier New, monospace', 'size': 16, 'color': style_dict[i]['color'] }
+                } for i in range(len(masses))
+            ]
+
+            fig.update_xaxes(title = 'm/z' , range=[xmin, xmax])
+            fig.update_yaxes(title = 'Intensity' , range=[0, ymax])
+            fig.update_layout({'shapes': shapes, 'annotations': annotations})
+            st.write(fig)
+
+
 def parse_file_and_display(file: str, results_yaml: dict):
     """Wrapper function to load file and displays dataframe in streamlit.
 
@@ -469,6 +572,7 @@ def parse_file_and_display(file: str, results_yaml: dict):
         correlation_heatmap(file, options)
         scatter_plot(file, options)
         pca_plot(file, options)
+        browse_psms(file, options, results_yaml)
 
         if results_yaml:
             sequence_coverage_map(file, options, results_yaml)

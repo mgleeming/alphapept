@@ -810,7 +810,7 @@ def get_score_columns(
 
 import matplotlib.pyplot as plt
 
-def plot_psms(index, ms_file):
+def plot_psms(index, ms_file, return_data = False):
 
     df = ms_file.read(dataset_name='peptide_fdr')
 
@@ -844,6 +844,9 @@ def plot_psms(index, ms_file):
     query_idx_end = query_indices[query_idx + 1]
     query_frag = query_frags[query_idx_start:query_idx_end]
     query_int = query_ints[query_idx_start:query_idx_end]
+
+    if return_data:
+        return query_frag, query_int, masses, ints, ion, ion_type
 
     ax = plt.figure(figsize=(15, 5))
 
